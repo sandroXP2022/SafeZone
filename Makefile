@@ -11,6 +11,8 @@ $(TARGET): $(SRC)
 
 install: $(TARGET)
 	mv ./$(TARGET) /usr/bin/
+	mkdir /root/.config/safezone
+	touch /root/.config/safezone/config
 
 uninstall:
 	rm -f /usr/bin/$(TARGET)
