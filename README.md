@@ -1,4 +1,4 @@
-# SafeZone 0.0.1
+# SafeZone 
 
 SafeZone is an encrypted credential manager in TUI (ncurses) that uses AES-256 and SHA-512 for security.
 
