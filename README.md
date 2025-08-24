@@ -4,7 +4,7 @@ SafeZone is an encrypted credential manager in TUI (ncurses) that uses AES-256 a
 It contains its own library, for integration with other projects in a simplified way.
 
 ## Features
-- **Lightweight code (only 300 lines of code)**
+- **Lightweight code**
 - **TUI interface for managing credentials and other encrypted data**
 - **AES-256 encryption for file encryption**
 - **Integrity check system** (using SHA-512 hash verification)
