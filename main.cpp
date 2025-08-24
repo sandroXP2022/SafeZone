@@ -5,16 +5,12 @@
 #include <vector>
 #include <string>
 #include <filesystem>
-#include <random>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <pwd.h>
-#include <openssl/sha.h>
 #include <openssl/aes.h>
-#include <iomanip>
+#include "safezone.h"
 
 namespace fs = std::filesystem;
-static constexpr char KEYS_FILE[] = "/.keys";
 static constexpr char MASTER_NAME[] = "master.key";
 
 bool fileExists(const std::string &p) {
@@ -22,89 +18,17 @@ bool fileExists(const std::string &p) {
     return stat(p.c_str(), &st) == 0;
 }
 
-std::vector<unsigned char> sha512(const std::vector<unsigned char> &d) {
-    std::vector<unsigned char> r(SHA512_DIGEST_LENGTH);
-    SHA512_CTX c;
-    SHA512_Init(&c);
-    SHA512_Update(&c, d.data(), d.size());
-    SHA512_Final(r.data(), &c);
-    return r;
-}
-
-std::string toHex(const std::vector<unsigned char> &d) {
-    std::ostringstream oss;
-    for (auto c : d) oss << std::hex << std::setw(2) << std::setfill('0') << (int)c;
-    return oss.str();
-}
-
-std::string getMountPointFromConfig() {
-    std::string cfg = std::string(getenv("HOME")) + "/.config/safezone/config";
-    std::ifstream f(cfg);
-    std::string line;
-    std::string drive;
-    while (std::getline(f, line)) {
-        if (line.rfind("DRIVE=", 0) == 0) {
-            drive = line.substr(6);
-            break;
-        }
-    }
-    if (drive.empty()) return "";
-    std::string mpt = "/mnt/safezone";
-    fs::create_directories(mpt);
-    std::string cmd = "mount " + drive + " " + mpt;
-    if (system(cmd.c_str()) != 0) return "";
-    return mpt;
-}
-
-void generateKeys(const std::string &keysFile, const std::string &masterFile) {
-    std::ofstream kf(keysFile);
-    std::ofstream mf(masterFile);
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<int> dist(0, 255);
-    for (int i = 0; i < 3; i++) {
-        std::vector<unsigned char> key(32);
-        for (auto &b : key) b = dist(gen);
-        std::string keyStr(key.begin(), key.end());
-        kf << keyStr << "\n";
-        auto hash = sha512(key);
-        mf << toHex(hash) << "\n";
-    }
-}
-
-bool verifyIntegrity(const std::string &keysFile, const std::string &masterFile) {
-    std::ifstream kf(keysFile);
-    std::ifstream mf(masterFile);
-    std::vector<std::string> keys, hashes;
-    for (std::string l; std::getline(kf, l);) keys.push_back(l);
-    for (std::string l; std::getline(mf, l);) hashes.push_back(l);
-    if (keys.size() != 3 || hashes.size() != 3) return false;
-    for (int i = 0; i < 3; i++) {
-        std::vector<unsigned char> k(keys[i].begin(), keys[i].end());
-        if (toHex(sha512(k)) != hashes[i]) return false;
-    }
-    return true;
-}
-
-void aesCrypt(const std::vector<unsigned char> &k, const std::vector<unsigned char> &i, std::vector<unsigned char> &o, bool enc) {
-    AES_KEY key;
-    if (enc)
-        AES_set_encrypt_key(k.data(), 256, &key);
-    else
-        AES_set_decrypt_key(k.data(), 256, &key);
-    size_t n = i.size() / AES_BLOCK_SIZE;
-    o.resize(n * AES_BLOCK_SIZE);
-    for (size_t idx = 0; idx < n; idx++)
-        AES_ecb_encrypt(i.data() + idx * AES_BLOCK_SIZE, o.data() + idx * AES_BLOCK_SIZE, &key, enc ? AES_ENCRYPT : AES_DECRYPT);
-}
-
 WINDOW *createWin(int h, int w) {
     int maxY, maxX;
     getmaxyx(stdscr, maxY, maxX);
-    WINDOW *win = newwin(h, w, (maxY - h) / 2, (maxX - w) / 2);
+    WINDOW *win = newwin(h, w, std::max(0,(maxY - h) / 2), std::max(0,(maxX - w) / 2));
     wbkgd(win, COLOR_PAIR(3));
     box(win, 0, 0);
     return win;
+}
+
+static void trimTrailingNulls(std::string &s) {
+    while (!s.empty() && s.back() == '\0') s.pop_back();
 }
 
 void createCredentials(WINDOW *w, const std::string &d, const std::vector<unsigned char> &k) {
@@ -126,7 +50,7 @@ void createCredentials(WINDOW *w, const std::string &d, const std::vector<unsign
     while (dt.size() % AES_BLOCK_SIZE) dt.push_back('\0');
     std::vector<unsigned char> i(dt.begin(), dt.end()), o;
     aesCrypt(k, i, o, true);
-    std::ofstream ofs(d + "/" + f + ".key", std::ios::binary);
+    std::ofstream ofs(d + "/" + std::string(f) + ".key", std::ios::binary | std::ios::trunc);
     ofs.write((char *)o.data(), o.size());
 }
 
@@ -142,9 +66,9 @@ void createOther(WINDOW *w, const std::string &d, const std::vector<unsigned cha
     mvwgetnstr(w, 2, 12, f, 63);
     std::string c;
     int lineY = 6;
-    char buf[128];
+    char buf[256];
     while (true) {
-        mvwgetnstr(w, lineY++, 2, buf, 127);
+        mvwgetnstr(w, lineY++, 2, buf, 255);
         if (!*buf) break;
         c += std::string(buf) + "\n";
     }
@@ -153,7 +77,7 @@ void createOther(WINDOW *w, const std::string &d, const std::vector<unsigned cha
     while (c.size() % AES_BLOCK_SIZE) c.push_back('\0');
     std::vector<unsigned char> i(c.begin(), c.end()), o;
     aesCrypt(k, i, o, true);
-    std::ofstream ofs(d + "/" + f + ".key", std::ios::binary);
+    std::ofstream ofs(d + "/" + std::string(f) + ".key", std::ios::binary | std::ios::trunc);
     ofs.write((char *)o.data(), o.size());
 }
 
@@ -162,9 +86,10 @@ void viewFile(WINDOW *w, const std::string &d, const std::vector<unsigned char> 
     box(w, 0, 0);
     mvwprintw(w, 1, 2, "Available .key files:");
     std::vector<std::string> files;
-    for (auto &p : fs::directory_iterator(d))
-        if (p.path().extension() == ".key" && p.path().filename() != MASTER_NAME)
+    for (auto &p : fs::directory_iterator(d)) {
+        if (p.path().extension() == ".key" && p.path().filename().string() != MASTER_NAME)
             files.push_back(p.path().filename().string());
+    }
     if (files.empty()) {
         mvwprintw(w, 3, 2, "No files found.");
         wrefresh(w);
@@ -176,11 +101,15 @@ void viewFile(WINDOW *w, const std::string &d, const std::vector<unsigned char> 
     int hl = 0;
     keypad(w, TRUE);
     while (true) {
-        for (int i = 0; i < (int)files.size() && i < h - 4; i++) {
+        werase(w);
+        box(w,0,0);
+        mvwprintw(w,1,2,"Available .key files:");
+        for (int i = 0; i < (int)files.size() && i < h - 6; i++) {
             if (i == hl) wattron(w, COLOR_PAIR(1));
             mvwprintw(w, 3 + i, 4, files[i].c_str());
             if (i == hl) wattroff(w, COLOR_PAIR(1));
         }
+        mvwprintw(w, h - 2, 2, "Use Arrows+Enter  Esc to back");
         wrefresh(w);
         int c = wgetch(w);
         if (c == KEY_UP && hl > 0) hl--;
@@ -189,51 +118,70 @@ void viewFile(WINDOW *w, const std::string &d, const std::vector<unsigned char> 
         else if (c == 27) return;
     }
     std::ifstream f(d + "/" + files[hl], std::ios::binary);
-    std::vector<unsigned char> enc((std::istreambuf_iterator<char>(f)), {}), dec;
+    std::vector<unsigned char> enc((std::istreambuf_iterator<char>(f)), {});
+    std::vector<unsigned char> dec;
+    if (enc.empty()) {
+        mvwprintw(w,3,2,"Empty file.");
+        wrefresh(w); wgetch(w); return;
+    }
     aesCrypt(k, enc, dec, false);
-    std::string content((char *)dec.data(), dec.size());
+    std::string content((char*)dec.data(), dec.size());
+    trimTrailingNulls(content);
     werase(w);
     box(w, 0, 0);
-    mvwprintw(w, 1, 2, "File:%s", files[hl].c_str());
+    mvwprintw(w, 1, 2, "File: %s", files[hl].c_str());
     if (content.find(':') != std::string::npos && content.find("\n") == std::string::npos) {
         auto pos = content.find(':');
-        mvwprintw(w, 3, 4, "User:%s", content.substr(0, pos).c_str());
-        mvwprintw(w, 4, 4, "Password:%s", content.substr(pos + 1).c_str());
+        std::string user = content.substr(0, pos);
+        std::string pass = content.substr(pos + 1);
+        mvwprintw(w, 3, 4, "User: %s", user.c_str());
+        mvwprintw(w, 4, 4, "Password: %s", pass.c_str());
     } else {
         mvwprintw(w, 3, 2, "--- Content ---");
         int line = 5;
         std::istringstream iss(content);
         std::string ln;
-        while (std::getline(iss, ln) && line < h - 1)
-            mvwprintw(w, line++, 2, ln.c_str());
+        int hgt, widt;
+        getmaxyx(w, hgt, widt);
+        while (std::getline(iss, ln) && line < hgt - 1)
+            mvwprintw(w, line++, 2, "%s", ln.c_str());
     }
     wrefresh(w);
     wgetch(w);
 }
 
 int main() {
+    std::string keysPath = get_keys_file_path();
     std::string mpt = getMountPointFromConfig();
     if (mpt.empty()) {
-        std::cerr << "Failed to mount drive from config." << std::endl;
+        std::cerr << "Failed to mount drive from config or no DRIVE set. Check ~/.config/safezone/config. mount may require root.\n";
         return 1;
     }
 
-    bool keysExist = fileExists(KEYS_FILE), masterExist = fileExists(mpt + "/" + MASTER_NAME);
+    bool keysExist = fileExists(keysPath), masterExist = fileExists(mpt + "/" + MASTER_NAME);
     if (keysExist != masterExist) {
-        std::cerr << "Integrity error: Only one key file exists." << std::endl;
+        std::cerr << "Integrity error: Only one of keys file or master exists.\n";
         return 1;
     }
     if (!keysExist && !masterExist) {
-        generateKeys(KEYS_FILE, mpt + "/" + MASTER_NAME);
-    } else if (!verifyIntegrity(KEYS_FILE, mpt + "/" + MASTER_NAME)) {
-        std::cerr << "Integrity verification failed." << std::endl;
+        generateKeys(keysPath, mpt + "/" + MASTER_NAME);
+    } else if (!verifyIntegrity(keysPath, mpt + "/" + MASTER_NAME)) {
+        std::cerr << "Integrity verification failed.\n";
         return 1;
     }
 
-    std::ifstream kf(KEYS_FILE);
+    std::ifstream kf(keysPath);
     std::string line;
     std::getline(kf, line);
-    std::vector<unsigned char> aesKey(line.begin(), line.end());
+    if (line.empty()) {
+        std::cerr << "No key found in keys file.\n";
+        return 1;
+    }
+    std::vector<unsigned char> aesKey = hexToBytes(line);
+    if (aesKey.size() != 32) {
+        std::cerr << "Invalid key length.\n";
+        return 1;
+    }
 
     initscr();
     start_color();
@@ -251,12 +199,12 @@ int main() {
     std::vector<std::string> menu = {"SafeZone 0.0.1", "Create File", "View File", "Exit"};
     int hl = 1;
     while (true) {
-        int h = menu.size() + 8, w = 50;
+        int h = (int)menu.size() + 8, w = 60;
         WINDOW *win = createWin(h, w);
         keypad(win, TRUE);
         for (int i = 0; i < (int)menu.size(); ++i) {
             if (i == hl) wattron(win, COLOR_PAIR(1));
-            mvwprintw(win, 2 + i, 2, menu[i].c_str());
+            mvwprintw(win, 2 + i, 2, "%s", menu[i].c_str());
             if (i == hl) wattroff(win, COLOR_PAIR(1));
         }
         mvwprintw(win, h - 2, 2, "Use Arrows+Enter");
@@ -277,7 +225,7 @@ int main() {
                     box(win, 0, 0);
                     for (int j = 0; j < (int)sub.size(); j++) {
                         if (j == sh) wattron(win, COLOR_PAIR(1));
-                        mvwprintw(win, 2 + j, 2, sub[j].c_str());
+                        mvwprintw(win, 2 + j, 2, "%s", sub[j].c_str());
                         if (j == sh) wattroff(win, COLOR_PAIR(1));
                     }
                     mvwprintw(win, (int)sub.size() + 4, 2, "Use Arrows+Enter");
@@ -297,7 +245,7 @@ int main() {
         delwin(win);
     }
     endwin();
-    system(("umount " + mpt).c_str());
+    system(("umount " + mpt + " 2>/dev/null").c_str());
     return 0;
 }
 

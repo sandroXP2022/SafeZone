@@ -1,22 +1,32 @@
 CC = g++
-CFLAGS = -std=c++17 -O3 -pipe -march=native -mtune=native
+CFLAGS = -std=c++17 -O3 -pipe -march=native -mtune=native -fPIC
 LDFLAGS = -lcrypto -lncurses
 TARGET = safezone
+LIB = libsafezone.so
 SRC = main.cpp
+LIBSRC = safezone.cpp
+HDR = safezone.h
 
-all: $(TARGET)
+all: app
 
-$(TARGET): $(SRC)
-	$(CC) $(CFLAGS) $(SRC) $(LDFLAGS) -o $(TARGET)
+lib: $(LIBSRC) $(HDR)
+	$(CC) $(CFLAGS) -shared $(LIBSRC) -o $(LIB) -lcrypto
+	mv ./$(LIB) /usr/lib/
+	ldconfig
 
-install: $(TARGET)
+app: lib $(SRC) $(HDR)
+	$(CC) $(CFLAGS) $(SRC) -lsafezone $(LDFLAGS) -o $(TARGET)
+
+install: app
 	mv ./$(TARGET) /usr/bin/
-	mkdir /root/.config/safezone
+	mkdir -p /root/.config/safezone
 	touch /root/.config/safezone/config
 
 uninstall:
 	rm -f /usr/bin/$(TARGET)
+	rm -f /usr/lib/$(LIB)
+	ldconfig
 
 clean:
-	rm -f $(TARGET)
+	rm -f $(TARGET) $(LIB) *.o
 

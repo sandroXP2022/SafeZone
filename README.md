@@ -1,6 +1,7 @@
 # SafeZone 
 
 SafeZone is an encrypted credential manager in TUI (ncurses) that uses AES-256 and SHA-512 for security.
+It contains its own library, for integration with other projects in a simplified way.
 
 ## Features
 - **Lightweight code (only 300 lines of code)**
@@ -19,7 +20,7 @@ SafeZone is an encrypted credential manager in TUI (ncurses) that uses AES-256 a
 ## Installation
 The program can be compiled and installed on the system in a simple way using:
 ```bash
-make && sudo make install
+sudo make install
 ```
 The binary will be moved to `/usr/bin/safezone`, now you need to edit the configuration file `/root/.config/safezone/config` to add the partition that will be used to store the keys.
 
@@ -33,4 +34,3 @@ DRIVE=/dev/sda1
 ## Execution
 To start the program, run ``sudo safezone``.
 
-Translated with DeepL.com (free version)
