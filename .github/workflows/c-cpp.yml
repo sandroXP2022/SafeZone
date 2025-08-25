@@ -24,7 +24,7 @@ jobs:
         run: sudo make lib
 
       - name: Build application
-        run: sudo make app
+        run: sudo make app && sudo make install
 
       - name: Create packaging structure
         run: |
