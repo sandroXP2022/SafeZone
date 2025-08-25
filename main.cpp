@@ -196,7 +196,7 @@ int main() {
     bkgd(COLOR_PAIR(2));
     refresh();
 
-    std::vector<std::string> menu = {"SafeZone 0.0.1", "Create File", "View File", "Exit"};
+    std::vector<std::string> menu = {"SafeZone 0.1.0", "Create File", "View File", "Exit"};
     int hl = 1;
     while (true) {
         int h = (int)menu.size() + 8, w = 60;
