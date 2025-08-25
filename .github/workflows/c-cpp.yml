@@ -31,8 +31,8 @@ jobs:
           mkdir -p package/usr/bin
           mkdir -p package/usr/lib
           mkdir -p package/root/.config/safezone
-          cp safezone package/usr/bin/
-          cp build/lib/libsafezone.so package/usr/lib/
+          cp /usr/bin/safezone package/usr/bin/
+          cp /usr/lib/libsafezone.so package/usr/lib/
           touch package/root/.config/safezone/config
 
       - name: Create compressed package (.tar.xz)
@@ -44,5 +44,3 @@ jobs:
         with:
           name: safezone
           path: safezone.tar.xz
-
-
