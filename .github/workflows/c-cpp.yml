@@ -22,14 +22,14 @@ jobs:
         run: sudo make lib
 
       - name: Build application
-        run: sudo make install
+        run: sudo make app && sudo make install
 
       - name: Create packaging structure
         run: |
           mkdir -p package/usr/bin
           mkdir -p package/usr/lib
           mkdir -p package/root/.config/safezone
-          cp ./safezone package/usr/bin/
+          cp /usr/bin/safezone package/usr/bin/
           cp /usr/lib/libsafezone.so package/usr/lib/
           touch package/root/.config/safezone/config
 
