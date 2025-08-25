@@ -39,7 +39,48 @@ jobs:
         run: |
           tar -cJf safezone.tar.xz -C package .
 
-      - name: Upload release asset
+      name: CI Build & Release
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++ make libssl-dev libncurses5-dev xz-utils
+
+      - name: Build library
+        run: sudo make lib
+
+      - name: Build application
+        run: sudo make app
+
+      - name: Create packaging structure
+        run: |
+          mkdir -p package/usr/bin
+          mkdir -p package/usr/lib
+          mkdir -p package/root/.config/safezone
+          cp ./safezone package/usr/bin/
+          cp /usr/lib/libsafezone.so package/usr/lib/
+          touch package/root/.config/safezone/config
+
+      - name: Create compressed package (.tar.xz)
+        run: |
+          tar -cJf safezone.tar.xz -C package .
+
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v0.1.0
+          name: "Safezone v0.1.0"
           files: safezone.tar.xz
