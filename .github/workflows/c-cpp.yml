@@ -18,7 +18,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y g++ make libssl-dev libncurses5-dev dpkg-dev
+          sudo apt-get install -y g++ make libssl-dev libncurses5-dev xz-utils
 
       - name: Build library
         run: sudo make lib
@@ -26,38 +26,23 @@ jobs:
       - name: Build application
         run: sudo make app
 
-      - name: Create packaging directories
+      - name: Create packaging structure
         run: |
           mkdir -p package/usr/bin
           mkdir -p package/usr/lib
           mkdir -p package/root/.config/safezone
           cp safezone package/usr/bin/
-          cp /usr/lib/libsafezone.so package/usr/lib/
+          cp build/lib/libsafezone.so package/usr/lib/
           touch package/root/.config/safezone/config
 
-      - name: Create tarball
+      - name: Create compressed package (.tar.xz)
         run: |
-          tar -czvf safezone-${{ github.sha }}.tar.gz -C package .
+          tar -cJf safezone.tar.xz -C package .
 
-      - name: Create Debian package
-        run: |
-          mkdir -p package/DEBIAN
-          cat <<EOF > package/DEBIAN/control
-          Package: safezone
-          Version: 1.0
-          Section: utils
-          Priority: optional
-          Architecture: amd64
-          Maintainer: Your Name <you@example.com>
-          Description: SafeZone - encryption and integrity verification tool
-          EOF
-          dpkg-deb --build package safezone_${{ github.sha }}.deb
-
-      - name: Upload artifacts
+      - name: Upload package artifact
         uses: actions/upload-artifact@v4
         with:
-          name: safezone-packages
-          path: |
-            safezone-${{ github.sha }}.tar.gz
-            safezone_${{ github.sha }}.deb
+          name: safezone
+          path: safezone.tar.xz
+
 
