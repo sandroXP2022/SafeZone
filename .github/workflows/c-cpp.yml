@@ -1,0 +1,62 @@
+name: CI Build & Package
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++ make libssl-dev libncurses5-dev dpkg-dev
+
+      - name: Build library
+        run: make lib
+
+      - name: Build application
+        run: make app
+
+      - name: Create packaging directories
+        run: |
+          mkdir -p package/usr/bin
+          mkdir -p package/usr/lib
+          mkdir -p package/root/.config/safezone
+          cp safezone package/usr/bin/
+          cp /usr/lib/libsafezone.so package/usr/lib/
+          touch package/root/.config/safezone/config
+
+      - name: Create tarball
+        run: |
+          tar -czvf safezone-${{ github.sha }}.tar.gz -C package .
+
+      - name: Create Debian package
+        run: |
+          mkdir -p package/DEBIAN
+          cat <<EOF > package/DEBIAN/control
+          Package: safezone
+          Version: 1.0
+          Section: utils
+          Priority: optional
+          Architecture: amd64
+          Maintainer: Your Name <you@example.com>
+          Description: SafeZone - encryption and integrity verification tool
+          EOF
+          dpkg-deb --build package safezone_${{ github.sha }}.deb
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: safezone-packages
+          path: |
+            safezone-${{ github.sha }}.tar.gz
+            safezone_${{ github.sha }}.deb
