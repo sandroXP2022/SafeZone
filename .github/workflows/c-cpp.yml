@@ -21,10 +21,10 @@ jobs:
           sudo apt-get install -y g++ make libssl-dev libncurses5-dev dpkg-dev
 
       - name: Build library
-        run: make lib
+        run: sudo make lib
 
       - name: Build application
-        run: make app
+        run: sudo make app
 
       - name: Create packaging directories
         run: |
