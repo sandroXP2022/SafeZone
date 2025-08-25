@@ -22,7 +22,7 @@ jobs:
         run: sudo make lib
 
       - name: Build application
-        run: sudo make app && sudo make install
+        run: sudo make install
 
       - name: Create packaging structure
         run: |
